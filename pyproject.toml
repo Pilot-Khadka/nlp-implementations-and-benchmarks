@@ -1,5 +1,5 @@
 [project]
-name = "nlp-algorithms"
+name = "nlp-implementations-and-benchmarks"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.scripts]
-nlp-algorithms = "nlp_algorithms:train"
+nlp-implementations-and-benchmarks = "nlp_algorithms:train"
 
 [build-system]
 requires = ["hatchling"]
@@ -37,3 +37,7 @@ dev = [
     "pyrefly>=0.55.0",
     "pytest>=9.0.2",
 ]
+
+[tool.hatch.build.targets.wheel]
+# the import package keeps its name, hatch would look for src/nlp_implementations_and_benchmarks
+packages = ["src/nlp_algorithms"]

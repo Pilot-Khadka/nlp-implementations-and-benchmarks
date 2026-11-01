@@ -1,0 +1,47 @@
+# gpt-2 (decoder only) language modeling on penn treebank, a small gpt-2 (4 layers, d256)
+dataset:
+  name: ptb
+  sequence_length: 128 # context per chunk, has to be <= model.max_len (256 was worse)
+  random_offset: true # other chunk boundaries every epoch, the biggest gain in the sweep
+  eval_split: valid # best checkpoint on ptb.valid, evaluate.py scores test
+  vocab_size: 10000
+  data_dir: data/dataset_penn_treebank/
+  train_url: "https://raw.githubusercontent.com/tomsercu/lstm/master/data/ptb.train.txt"
+  valid_url: "https://raw.githubusercontent.com/tomsercu/lstm/master/data/ptb.valid.txt"
+  test_url: "https://raw.githubusercontent.com/tomsercu/lstm/master/data/ptb.test.txt"
+
+  use_cache: true
+  num_workers: auto
+  pin_memory: true
+  prefetch_factor: 2
+
+tokenizer:
+  name: whitespace
+
+model:
+  name: gpt2
+  d_model: 256
+  num_layers: 4
+  num_heads: 4
+  d_ff: 1024
+  max_len: 256
+  dropout: 0.4 # ptb is small (~930k tokens), a transformer overfits it quickly
+  attn_dropout: 0.1
+  embedding_dropout: 0.1
+
+train:
+  epochs: 100
+  batch_size: 32
+  multi_gpu: false # the language modeling iterator has no ddp sampler
+  optimizer: adamw
+  learning_rate: 6e-4
+  weight_decay: 0.1
+  warmup: 200 # steps
+  grad_clip: 1.0
+  amp: true # bf16, or fp16 + grad scaler on t4
+  checkpoint_dir: checkpoint/ptb/gpt2
+
+task:
+  name: language_modeling
+  metrics:
+    - perplexity

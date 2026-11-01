@@ -4,6 +4,7 @@ from typing import List
 import os
 import gc
 import time
+import pickle
 import random
 import inspect
 import logging
@@ -159,6 +160,15 @@ def build_vocab_from_key(
 
         return Vocabulary(token_to_id)
 
+    # word level (whitespace): tokenizer.path reuses the vocab of an earlier run, e.g.
+    # the ptb vocab while pretraining on wikitext, so the ids match fine-tuning
+    if config.tokenizer.get("path"):
+        save_path = resolve_tokenizer_path(config, key)
+        with open(save_path, "rb") as f:
+            token_to_id = pickle.load(f)
+        logger.info(f"vocab: loaded {save_path} ({len(token_to_id)} tokens)")
+        return Vocabulary(token_to_id)
+
     counter = Counter()
 
     for item in tqdm(dataset, desc=f"Building vocab from '{key}'"):
@@ -188,6 +198,12 @@ def build_vocab_from_key(
 
     del counter
     gc.collect()
+
+    # saved like a trained tokenizer, a later run points tokenizer.path at it
+    save_path = resolve_tokenizer_path(config, key)
+    with open(save_path, "wb") as f:
+        pickle.dump(token_to_id, f)
+    logger.info(f"vocab: {len(token_to_id)} tokens, saved to {save_path}")
 
     return Vocabulary(token_to_id)
 
@@ -222,8 +238,9 @@ class DatasetBundleBuilder:
 
         available_splits = set(os.listdir(data_dir))
 
-        has_valid = "valid" in available_splits or "validation" in available_splits
-        has_test = "test" in available_splits
+        # split dirs (valid/, test/) or files with the split in the name (ptb.valid.txt)
+        has_valid = any("valid" in name for name in available_splits)
+        has_test = any("test" in name for name in available_splits)
 
         if has_valid:
             valid = data_reader_cls(

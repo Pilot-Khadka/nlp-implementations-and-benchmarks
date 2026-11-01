@@ -17,6 +17,13 @@ from nlp_algorithms.engine.registry import register_trainer
 
 @register_trainer("language_modeling")
 class LanguageModelingTask(BaseTrainer):
+    def __init__(self, config, builder, gpu_id: int = 0, use_ddp: bool = False):
+        super().__init__(config, builder, gpu_id=gpu_id, use_ddp=use_ddp)
+        # gpt-2 uses warmup + linear decay stepped every batch, the rnns keep theirs
+        self.lr_scheduler = None
+        if config.model.name == "gpt2":
+            self.lr_scheduler = self.warmup_linear_decay()
+
     def _detach(self, x):
         if x is None:
             return None
@@ -37,7 +44,9 @@ class LanguageModelingTask(BaseTrainer):
 
     def _get_forward_accepts(self):
         model = self._unwrap_model()
-        params = inspect.signature(model.encoder.forward).parameters
+        # gpt-2 has no rnn encoder and no hidden state to carry between batches
+        encoder = getattr(model, "encoder", model)
+        params = inspect.signature(encoder.forward).parameters
         return "hidden" in params
 
     def _create_progress(self, loader, desc):
@@ -118,6 +127,8 @@ class LanguageModelingTask(BaseTrainer):
                     targets.view(-1),
                 )
             self.backward_step(loss)
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
 
             batch_tokens = targets.numel()
             # convert mean loss into token weighted sum
@@ -178,7 +189,7 @@ class LanguageModelingTask(BaseTrainer):
             valid_progress = self.test_loader
 
         total_loss_sum = torch.zeros((), dtype=torch.float64, device=self.device)
-        total_tokens = 0
+        total_tokens = torch.zeros((), dtype=torch.long, device=self.device)
         # checked once after the loop, a check per batch waits for the gpu every time
         non_finite = torch.zeros((), dtype=torch.bool, device=self.device)
 
@@ -199,7 +210,9 @@ class LanguageModelingTask(BaseTrainer):
                 loss = self.criterion(
                     logits.view(-1, logits.size(-1)), targets.view(-1)
                 )
-                batch_tokens = targets.numel()
+                # the loss is a mean over the scored targets, the sliding window
+                # evaluation masks the already scored ones with the ignored <pad>
+                batch_tokens = (targets != self.criterion.ignore_index).sum()
 
                 total_loss_sum += loss.detach().double() * batch_tokens
                 total_tokens += batch_tokens
@@ -207,6 +220,7 @@ class LanguageModelingTask(BaseTrainer):
         if non_finite.item():
             raise ValueError("Model produced NaN or Inf logits during evaluation")
         total_loss_sum = total_loss_sum.item()
+        total_tokens = total_tokens.item()
 
         if self.use_ddp:
             t = torch.tensor([total_loss_sum, float(total_tokens)], device=self.device)

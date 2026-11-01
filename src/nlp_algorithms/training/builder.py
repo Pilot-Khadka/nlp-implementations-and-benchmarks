@@ -173,16 +173,22 @@ class TrainerBuilder:
             seq_len=self.config.dataset.sequence_length,
             device=self.device,
             batch_first=True,
+            random_offset=self.config.dataset.get("random_offset", False),
         )
 
+        # eval_split valid picks the best checkpoint on ptb.valid, evaluate.py sets test
+        eval_split = self.config.dataset.get("eval_split", "test")
         test_iterator = collator_class(
-            base_dataset=data_bundle.test,
+            base_dataset=data_bundle.val if eval_split == "valid" else data_bundle.test,
             tokenizer=data_bundle.src_tokenizer,
             vocab=data_bundle.vocab,
-            batch_size=self.config.train.batch_size,
+            batch_size=self.config.dataset.get(
+                "eval_batch_size", self.config.train.batch_size
+            ),
             seq_len=self.config.dataset.sequence_length,
             device=self.device,
             batch_first=True,
+            stride=self.config.dataset.get("eval_stride", None),
         )
 
         if self.use_ddp:

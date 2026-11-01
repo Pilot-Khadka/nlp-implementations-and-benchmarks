@@ -20,6 +20,8 @@ class CorpusLanguageModelingDataset:
         seq_len: int,
         device: Optional[torch.device] = None,
         batch_first: bool = True,
+        stride: Optional[int] = None,
+        random_offset: bool = False,
     ):
         """
         Args:
@@ -30,6 +32,11 @@ class CorpusLanguageModelingDataset:
             seq_len: Length of each sequence chunk
             device: Device to place tensors on
             batch_first: If True, return (batch_size, seq_len), else (seq_len, batch_size)
+            stride: sliding window evaluation, windows of seq_len move by stride and only
+                the last stride targets are scored (the rest are <pad>, ignored by the loss),
+                so every token has seq_len - stride tokens of context. None = no overlap
+            random_offset: start every pass at a random position below seq_len, the chunk
+                boundaries change every epoch (for training)
         """
         self.base = base_dataset
         self.tokenizer = tokenizer
@@ -38,6 +45,8 @@ class CorpusLanguageModelingDataset:
         self.seq_len = seq_len
         self.device = device
         self.batch_first = batch_first
+        self.stride = stride
+        self.random_offset = random_offset
 
         self._prepare_data()
 
@@ -56,6 +65,10 @@ class CorpusLanguageModelingDataset:
 
         self.n_steps = self.data.size(0)
         self.n_batches = (self.n_steps - 1) // self.seq_len
+        if self.stride:
+            # one window of seq_len, then one per stride targets
+            remaining = max(0, self.n_steps - 1 - self.seq_len)
+            self.n_batches = 1 + -(-remaining // self.stride)
 
     def _batchify(self, data: torch.Tensor, batch_size: int) -> torch.Tensor:
         """
@@ -83,6 +96,8 @@ class CorpusLanguageModelingDataset:
     def __iter__(self) -> Iterator[Tuple[torch.Tensor, torch.Tensor]]:
         """Iterate through corpus in seq_len chunks."""
         self.pos = 0
+        if self.random_offset:
+            self.pos = int(torch.randint(self.seq_len, ()).item())
         return self
 
     def __next__(self) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -94,13 +109,33 @@ class CorpusLanguageModelingDataset:
         if self.pos >= self.n_steps - 1:
             raise StopIteration
 
+        if self.stride:
+            return self._next_window()
+
         actual_seq_len = min(self.seq_len, self.n_steps - 1 - self.pos)
 
         x = self.data[self.pos : self.pos + actual_seq_len]
         y = self.data[self.pos + 1 : self.pos + 1 + actual_seq_len]
 
         self.pos += actual_seq_len
+        return self._output(x, y)
 
+    def _next_window(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        # the first window scores all its targets, the later ones the last stride
+        step = self.stride if self.pos > 0 else self.seq_len
+        end = min(self.pos + step, self.n_steps - 1)
+        start = max(0, end - self.seq_len)
+
+        x = self.data[start:end]
+        # clone, the masking below would otherwise write into self.data
+        y = self.data[start + 1 : end + 1].clone()
+        # these targets were scored by the previous window
+        y[: self.pos - start] = self.vocab.pad_id
+
+        self.pos = end
+        return self._output(x, y)
+
+    def _output(self, x, y) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.device is not None:
             x = x.to(self.device)
             y = y.to(self.device)

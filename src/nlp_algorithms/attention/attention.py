@@ -4,16 +4,21 @@ import torch.nn.functional as F
 
 
 class MultiHeadSelfAttention(nn.Module):
-    def __init__(self, d_model: int, num_heads: int):
+    def __init__(self, d_model: int, num_heads: int, dropout: float = 0.0):
         super().__init__()
         assert d_model % num_heads == 0
+        # dropout on the attention weights, only while training
+        self.dropout = dropout
         self.num_heads = num_heads
         self.head_dim = d_model // num_heads
         self.qkv_proj = nn.Linear(d_model, 3 * d_model)
         self.out_proj = nn.Linear(d_model, d_model)
 
     def forward(
-        self, x: torch.Tensor, mask: torch.Tensor | None = None
+        self,
+        x: torch.Tensor,
+        mask: torch.Tensor | None = None,
+        is_causal: bool = False,
     ) -> torch.Tensor:
         B, S, _ = x.size()
 
@@ -24,7 +29,15 @@ class MultiHeadSelfAttention(nn.Module):
             .unbind(0)
         )
 
-        out = F.scaled_dot_product_attention(q, k, v, attn_mask=mask)
+        # is_causal masks the future tokens without building a mask tensor
+        out = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=is_causal,
+        )
         return self.out_proj(out.transpose(1, 2).reshape(B, S, -1))
 
 

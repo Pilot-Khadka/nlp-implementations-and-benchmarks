@@ -121,9 +121,82 @@ class ClassificationModel(nn.Module):
         return logits, hidden
 
 
+def load_pretrained(model: nn.Module, path: str) -> None:
+    """
+    description: load a state dict saved by train.py into a model built for this
+        config, not strict, so a model can start from one pretrained on another task
+        (lm -> classification, bert mlm -> classification, more pretraining).
+        the token ids have to be the same, reuse the vocab with tokenizer.path
+
+    inputs:
+        model: the model built from the config
+        path: model_best.pt / model_final.pt of the earlier run
+    """
+    state = torch.load(path, map_location="cpu", weights_only=True)
+
+    target, prefix = model, ""
+    if not model.state_dict().keys() & state.keys():
+        # a wrapper around the pretrained model, e.g. BERTClassifier(bert)
+        for name, child in model.named_children():
+            if child.state_dict().keys() & state.keys():
+                target, prefix = child, f"{name}."
+                break
+
+    own = target.state_dict()
+    # usually another vocab (tokenizer.path not set) or model size, not a silent skip
+    mismatched = [
+        f"{k} {tuple(state[k].shape)} vs {tuple(own[k].shape)}"
+        for k in state
+        if k in own and state[k].shape != own[k].shape
+    ]
+    if mismatched:
+        raise ValueError(
+            f"model.pretrained {path}: other shapes than the model, "
+            f"{', '.join(mismatched[:4])}"
+        )
+    # by hand, load_state_dict does not report keys of a child set to None
+    # (BERTClassifier drops the mlm and nsp heads that way)
+    unexpected = [k for k in state if k not in own]
+    loaded = {k: v for k, v in state.items() if k in own}
+    missing = [k for k in own if k not in loaded]
+    if not loaded:
+        raise ValueError(f"model.pretrained {path}: no parameter matches the model")
+
+    target.load_state_dict(loaded, strict=False)
+    logger.info(
+        f"loaded {len(loaded)} pretrained tensors from {path} "
+        f"into '{prefix.rstrip('.') or 'model'}'"
+    )
+    # missing = trained from scratch, unexpected = not used (e.g. the mlm head)
+    for name, keys in [
+        ("new (not in the checkpoint)", missing),
+        ("unused", unexpected),
+    ]:
+        if keys:
+            shown = ", ".join(sorted(keys)[:8])
+            more = f" (+{len(keys) - 8} more)" if len(keys) > 8 else ""
+            logger.info(f"  {name}: {shown}{more}")
+
+
 class ModelFactory:
     @staticmethod
     def create_model(
+        model_config,
+        dataset_bundle,
+        task_config,
+        data_config,
+    ):
+        model = ModelFactory._build_model(
+            model_config, dataset_bundle, task_config, data_config
+        )
+        # model.pretrained works for every model, e.g. bert_classification_imdb.yaml
+        pretrained = model_config.get("pretrained")
+        if pretrained:
+            load_pretrained(model, pretrained)
+        return model
+
+    @staticmethod
+    def _build_model(
         model_config,
         dataset_bundle,
         task_config,
@@ -170,21 +243,23 @@ class ModelFactory:
             MODEL_REGISTRY, model_config.name, flags=model_flags
         )
 
+        # pretrained is loaded by create_model, it is not a constructor argument
+        not_kwargs = {"name", "pretrained"}
+
         if task_config.name == "masked_language_modeling":
             # bert has its own token, position and segment embeddings and heads
-            kwargs = {k: v for k, v in model_config.items() if k != "name"}
+            kwargs = {k: v for k, v in model_config.items() if k not in not_kwargs}
+            return model_class(vocab_size=len(dataset_bundle.vocab), **kwargs)
+
+        if task_config.name == "language_modeling" and model_config.name == "gpt2":
+            # gpt-2 has its own token and position embeddings and a tied lm head
+            kwargs = {k: v for k, v in model_config.items() if k not in not_kwargs}
             return model_class(vocab_size=len(dataset_bundle.vocab), **kwargs)
 
         if task_config.name == "classification" and model_config.name == "bert":
-            kwargs = {
-                k: v for k, v in model_config.items() if k not in {"name", "pretrained"}
-            }
+            kwargs = {k: v for k, v in model_config.items() if k not in not_kwargs}
             bert = model_class(vocab_size=len(dataset_bundle.vocab), **kwargs)
-            pretrained = model_config.get("pretrained")
-            if pretrained:
-                # the mlm + nsp checkpoint, the vocab has to be the pretraining one
-                bert.load_state_dict(torch.load(pretrained, map_location="cpu"))
-                logger.info(f"bert: loaded pretrained weights from {pretrained}")
+            # model.pretrained (the mlm + nsp checkpoint) goes into the wrapped bert
             return BERTClassifier(
                 bert, data_config.num_class, dropout=model_config.get("dropout", 0.1)
             )
@@ -199,7 +274,9 @@ class ModelFactory:
         encoder_kwargs = {
             k: v
             for k, v in model_config.items()
-            if k not in variant_flag_names and k not in explicit_kwargs
+            if k not in variant_flag_names
+            and k not in explicit_kwargs
+            and k != "pretrained"
         }
 
         encoder = model_class(**explicit_kwargs, **encoder_kwargs)

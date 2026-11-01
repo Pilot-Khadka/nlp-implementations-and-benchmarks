@@ -1,5 +1,5 @@
-# nlp-algorithms
-This repo implements classic and modern nlp algorithms. This project is ongoing as more algorithms, metrics and tasks are added.
+# nlp-implementations-and-benchmarks
+This repo implements classic and modern nlp algorithms, from tokenization and RNNs to encoder-only, encoder-decoder and decoder-only transformers.
 
 ## components:
 - [x] Tokenization (whitespace, BPE)
@@ -9,7 +9,7 @@ This repo implements classic and modern nlp algorithms. This project is ongoing 
 - [x] Transformer models
   - [x] Sequence-to-Sequence
   - [x] Encoder only (BERT)
-  - [ ] Decoder only
+  - [x] Decoder only (GPT-2)
 - [x] NLP tasks
   - [x] Classification
   - [x] Language Modeling
@@ -26,7 +26,7 @@ This repo implements classic and modern nlp algorithms. This project is ongoing 
 | Transformer Attention       | Implemented   |
 | Transformer Encoder only model (BERT) | Implemented   |
 | Transformer Encoder-Decoder | Implemented   |
-| Transformer Decoder-only model    | Planned       |
+| Transformer Decoder-only model (GPT-2) | Implemented   |
 
 ## datasets
 
@@ -90,6 +90,15 @@ Pretraining (masked language modeling + next sentence prediction) on the imdb re
 | **QRNN**         | Custom                       | BS=32, SeqLen=70, Dropouti=0.4, Dropouth=0.25, 3-layer, 1000 hidden, locked dropout | 60        | 113.21          | 118.69s            |
 | **GRU**          | Custom (locked drop, embed drop, variational drop) | BS=16, SeqLen=70, Dropouti=0.4, EmbDrop=0.1, Dropouth=0.25, Dropout=0.4, 3-layer, 1000 hidden | 60 | **91.55** | 296s |
 | **GRU**          | PyTorch (weight drop, locked drop, embed drop)     | BS=16, SeqLen=70, Dropouti=0.4, EmbDrop=0.1, Dropouth=0.25, Dropout=0.4, 3-layer, 1000 hidden | 60 | **91.61** | 101s |
+| **GPT-2**        | [reported score from Radford et al. 2019, Table 3](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) | 12 layers, d=768, 117M params, zero-shot (trained on WebText, not on ptb) | - | 65.85 | - |
+| **GPT-2 (small)** | Custom                      | BS=32, SeqLen=128, random chunk offset, 4 layers, d=256, FF=1024, 4 heads, 5.78M params, dropout 0.4, attn/embed dropout 0.1, AdamW 6e-4 wd 0.1, warmup 200 + linear decay | 100 | 93.84 | 5.3s (T4) |
+
+**Notes**
+
+- The custom GPT-2 sees non-overlapping 128 token chunks with no state carried over (the RNNs carry their hidden state across batches). The chunk boundaries move to a random offset every epoch, so the chunks differ between epochs. Training takes 9.4 min on one T4.
+- The best checkpoint is picked on ptb.valid (epoch 98, valid perplexity 102.18) and scored once on ptb.test. The last epoch (no checkpoint selection) scores 93.98 on test.
+- The settings come from a sweep of 10 runs (60 epochs, picked on valid). Random chunk offsets gave the largest gain (106.97 -> 97.06 test), then more dropout and 128 instead of 256 token chunks (95.60), then 100 instead of 60 epochs (93.84). Larger models (d=384 and d=512, 6 layers) and more dropout (0.5+) were not better. The first run without these (256 token chunks, dropout 0.3, 40 epochs, checkpoint picked on test) got 109.27.
+- PTB has ~930k training tokens, the train/valid gap keeps growing (train loss 3.90 vs valid loss 4.63 at the end) and the transformer does not beat the regularized RNNs. The reported GPT-2 score is zero-shot from a much larger model and dataset with a different tokenization, so it is not directly comparable.
 
 ### machine translation (multi30k en->de)
 
@@ -112,9 +121,3 @@ Pretraining (masked language modeling + next sentence prediction) on the imdb re
 * Both are trained on the same 208k parallel sentences (no back-translated data).
 * The reported score is on FLORES v1 devtest, this repo uses FLORES+ devtest (different sentences), so the scores are close but not the same test set.
 * Nepali text is normalized (Devanagari digits to ASCII, danda spacing, zero-width characters) and duplicate pairs are removed before training.
-
-## roadmap
-- [x] training seq-2-seq model on machine translation
-- [ ] benchmarking against pytorch/official models
-- [x] add BERT as encoder only model
-- [ ] add GPT-2 as decoder only model

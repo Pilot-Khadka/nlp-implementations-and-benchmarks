@@ -29,6 +29,8 @@ def evaluate_checkpoint(config, checkpoint=None, gpu_id: int = 0):
 
     # eval only, no need for a compiled model
     config.train.compile_model = False
+    # training may pick the best checkpoint on the valid split, the score is on test
+    config.dataset.eval_split = "test"
     pipeline = TrainerBuilder(config=config, gpu_id=gpu_id, use_ddp=False).build()
 
     device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
