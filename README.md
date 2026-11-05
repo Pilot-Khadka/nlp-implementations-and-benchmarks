@@ -83,15 +83,22 @@ Translation configs use their own pipeline (joint or separate byte-level BPE, to
 
 ### standalone modules
 
-The classic algorithms have small demos that run on their own:
+The classic algorithms have small demos that run on their own. The data they need is downloaded into `data/` on the first run (tiny shakespeare, names, WordNet 3.1, the 1 billion word benchmark for word2vec).
 
 ```bash
-uv run python -m nlp_algorithms.tokenization.bpe
+uv run python -m nlp_algorithms.tokenization.bpe                      # byte-level BPE on tiny shakespeare
 uv run python -m nlp_algorithms.stemming.porter_stemmer
-uv run python -m nlp_algorithms.lemmatization.lemmatization_wordnet
+uv run python -m nlp_algorithms.lemmatization.lemmatization           # rule based
+uv run python -m nlp_algorithms.lemmatization.lemmatization_wordnet   # rules + WordNet lookup
 uv run python -m nlp_algorithms.vectorization.tfidf
+uv run python -m nlp_algorithms.vectorization.word2vec.skipgram       # skip-gram pairs with negative sampling
+uv run python -m nlp_algorithms.vectorization.word2vec.train --max_sentences 100000   # 1.7 GB download
+uv run python -m nlp_algorithms.lm_ngram_lm.mlp                       # character level MLP language model on names
 uv run pytest test/
 ```
+
+- The porter stemmer matches NLTK's original-algorithm porter stemmer on 99.97% of the 22,987 distinct words in the complete works of Shakespeare (the rest are 1-2 letter words, which the reference implementation leaves unchanged).
+- The character level MLP (block size 3, 10-d embeddings, 200 hidden) reaches 2.14 train / 2.18 valid / 2.15 test loss on names.txt after 200k steps.
 
 ## project structure
 

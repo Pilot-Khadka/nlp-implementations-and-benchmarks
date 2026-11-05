@@ -5,6 +5,13 @@ from collections import Counter
 
 from tqdm import tqdm
 
+from nlp_algorithms.util.path_util import get_data_path
+
+OBW_TRAIN_DIR = os.path.join(
+    "1-billion-word-language-modeling-benchmark-r13output",
+    "training-monolingual.tokenized.shuffled",
+)
+
 
 class DownloadProgressBar(tqdm):
     def update_to(self, b=1, bsize=1, tsize=None):
@@ -13,18 +20,13 @@ class DownloadProgressBar(tqdm):
         self.update(b * bsize - self.n)
 
 
-def download_and_extract_obw(dest_dir="./1billion_word"):
+def download_and_extract_obw(dest_dir=None):
+    dest_dir = dest_dir or str(get_data_path() / "1billion_word")
     url = "https://www.statmt.org/lm-benchmark/1-billion-word-language-modeling-benchmark-r13output.tar.gz"
     filename = url.split("/")[-1]
     tar_path = os.path.join(dest_dir, filename)
 
-    if os.path.exists(
-        os.path.join(
-            dest_dir,
-            "1-billion-word-language-modeling-benchmark-r13output",
-            "training-monolingual.tokenized.shuffled",
-        )
-    ):
+    if os.path.exists(os.path.join(dest_dir, OBW_TRAIN_DIR)):
         print("Dataset already exists. Skipping download.")
         return
 

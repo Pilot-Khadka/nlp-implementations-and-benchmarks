@@ -6,15 +6,19 @@ import argparse
 from tqdm import tqdm
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-# pyrefly: ignore [missing-import]
-from one_billion_dataset import (
+from nlp_algorithms.util.path_util import get_data_path, get_project_base_path
+from nlp_algorithms.vectorization.word2vec.one_billion_dataset import (
+    OBW_TRAIN_DIR,
     load_corpus,
     build_vocab,
     tokens_to_ids,
     download_and_extract_obw,
 )
-# pyrefly: ignore [missing-import]
-from word2vec import UnigramSampler, Word2Vec, SkipGramDataset
+from nlp_algorithms.vectorization.word2vec.w2vec import (
+    UnigramSampler,
+    Word2Vec,
+    SkipGramDataset,
+)
 
 
 def parse_args():
@@ -24,13 +28,13 @@ def parse_args():
     parser.add_argument(
         "--data_dir",
         type=str,
-        default="./1billion_word/1-billion-word-language-modeling-benchmark-r13output/training-monolingual.tokenized.shuffled",
+        default=str(get_data_path() / "1billion_word" / OBW_TRAIN_DIR),
         help="Directory containing tokenized and shuffled training data",
     )
     parser.add_argument(
         "--save_dir",
         type=str,
-        default="../../models/word2vec/",
+        default=str(get_project_base_path() / "checkpoint" / "word2vec"),
         help="Directory to save model and vocab",
     )
     parser.add_argument(
@@ -188,6 +192,8 @@ def main():
     args = parse_args()
 
     os.makedirs(args.save_dir, exist_ok=True)
+    if not os.path.exists(args.data_dir):
+        download_and_extract_obw()
 
     tokens, counter = load_corpus(args.data_dir, max_sentences=args.max_sentences)
     word2idx, idx2word, word_freq = build_vocab(counter, min_count=args.min_count)
@@ -226,5 +232,4 @@ def main():
 
 
 if __name__ == "__main__":
-    download_and_extract_obw()
     main()

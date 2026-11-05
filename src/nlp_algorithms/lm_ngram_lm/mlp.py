@@ -11,7 +11,6 @@ Each word in the training data is transformed into a compact feature vector base
 import torch
 import torch.nn.functional as F
 import random
-from pathlib import Path
 from typing import Tuple, List
 
 
@@ -264,10 +263,9 @@ def main():
     random.seed(0)
     torch.manual_seed(0)
 
-    data_path = Path("names.txt")
-    if not data_path.exists():
-        print(f"file {data_path} not found.")
-        return
+    from nlp_algorithms.util.data import get_data_file, NAMES_URL
+
+    data_path = get_data_file("names.txt", NAMES_URL)
 
     with open(data_path, "r") as f:
         words = f.read().splitlines()

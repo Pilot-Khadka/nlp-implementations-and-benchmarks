@@ -2,16 +2,18 @@ import re
 import numpy as np
 from collections import deque
 
+from nlp_algorithms.util.data import get_data_file, TINY_SHAKESPEARE_URL
+
 
 class Skipgram:
     def __init__(
         self,
         window_size=2,
         neg_samples=2,
-        path="../../data/tiny_shakespeare.txt",
+        path=None,
     ):
         self.corpus = []
-        self.path = path
+        self.path = path or get_data_file("tiny_shakespeare.txt", TINY_SHAKESPEARE_URL)
         self.vocab = set()
         self.window_size = window_size
         self.neg_samples = neg_samples
@@ -69,8 +71,9 @@ class Skipgram:
                 center_word = window[self.window_size]
                 center_idx = self.word2idx[center_word]
 
+                # every word in the window except the center position
                 context_words = [
-                    window[j] for j in range(len(window)) if j != center_idx
+                    window[j] for j in range(len(window)) if j != self.window_size
                 ]
 
                 for context in context_words:
@@ -80,9 +83,10 @@ class Skipgram:
                 for _ in range(self.neg_samples):
                     negative_idx = np.random.choice(
                         self.negative_samples_table, size=1)
-                    dataset.append((center_idx, int(negative_idx), 0))
-            print(f"\rProcessing {
-                  i + 1}/{total_words} words", end="\r", flush=True)
+                    dataset.append((center_idx, int(negative_idx[0]), 0))
+            if (i + 1) % 10000 == 0 or i + 1 == total_words:
+                print(f"\rProcessing {i + 1}/{total_words} words", end="", flush=True)
+        print()
 
         self.dataset = dataset
 
@@ -97,8 +101,10 @@ class Skipgram:
 
 def main():
     skipgram = Skipgram()
-    # pyrefly: ignore [missing-attribute]
-    skipgram.build_dataset()
+    print(f"vocab {len(skipgram)} words, {len(skipgram.dataset)} pairs")
+    centers, contexts, labels = zip(*next(skipgram.batch_generator(batch_size=8)))
+    for c, o, label in zip(centers, contexts, labels):
+        print(f"{skipgram.idx2word[c]:>12} {skipgram.idx2word[o]:>12} {label}")
 
 
 if __name__ == "__main__":

@@ -22,8 +22,10 @@ class TFIDF:
             unique_words = set(words)
             df_counter.update(unique_words)
 
+        # smoothed on both sides, log(n / (1 + df)) is negative for a word in every document
         self.idf = {
-            word: math.log(self.n_docs / (1 + df)) for word, df in df_counter.items()
+            word: math.log((1 + self.n_docs) / (1 + df))
+            for word, df in df_counter.items()
         }
         self.df = df_counter
         self.vocab = set(df_counter.keys())

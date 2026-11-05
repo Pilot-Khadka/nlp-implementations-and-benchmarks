@@ -237,9 +237,9 @@ if __name__ == "__main__":
     import time
     import tempfile
     from pathlib import Path
-    from nlp_algorithms.util.path_util import get_data_path
+    from nlp_algorithms.util.data import get_data_file, TINY_SHAKESPEARE_URL
 
-    sample_txt_file = get_data_path() / "shakespeare.txt"
+    sample_txt_file = get_data_file("tiny_shakespeare.txt", TINY_SHAKESPEARE_URL)
     text = open(sample_txt_file, "r", encoding="utf-8").read()
 
     tokenizer = BytePairEncoder(vocab_size=512)
