@@ -1,5 +1,6 @@
 from typing import Optional
 
+import os
 import time
 import random
 import functools
@@ -213,7 +214,7 @@ def tune_hyperparameters(
     data_fraction: float = 0.1,
     max_padding: int = 72,
     study_name: str = "seq2seq_tuning",
-    storage: Optional[str] = "sqlite:///seq2seq_tuning.db",
+    storage: Optional[str] = "sqlite:///checkpoint/tuning/seq2seq_tuning.db",
     devices: Optional[list[torch.device]] = None,
     n_trials: Optional[int] = None,
     seed: int = 42,
@@ -247,6 +248,12 @@ def tune_hyperparameters(
         reduction_factor=3,
         min_early_stopping_rate=0,
     )
+
+    if storage and storage.startswith("sqlite:///"):
+        # sqlite does not create the folder
+        db_dir = os.path.dirname(storage[len("sqlite:///"):])
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
 
     study = optuna.create_study(
         direction="minimize",

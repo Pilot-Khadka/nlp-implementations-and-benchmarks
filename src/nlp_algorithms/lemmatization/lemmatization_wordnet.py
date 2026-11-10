@@ -137,11 +137,11 @@ class WordNetLemmatizer:
 
 
 def demo():
-    wordnet_dir = "wordnet_data/dict/"
+    from nlp_algorithms.lemmatization.wordnet_downloader import WordNetDownloader
 
-    if not os.path.exists(wordnet_dir):
-        print(f"Error: WordNet directory not found at {wordnet_dir}")
-        print("Please update the path to your WordNet installation.")
+    # data/wordnet/dict, downloaded on the first run
+    wordnet_dir = WordNetDownloader().install()
+    if wordnet_dir is None:
         return
 
     lemmatizer = WordNetLemmatizer(wordnet_dir)

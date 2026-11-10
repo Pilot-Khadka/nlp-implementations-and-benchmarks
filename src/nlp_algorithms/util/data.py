@@ -11,6 +11,25 @@ from nlp_algorithms.util.logger import fmt_time
 logger = logging.getLogger(__name__)
 
 
+TINY_SHAKESPEARE_URL = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+NAMES_URL = "https://raw.githubusercontent.com/karpathy/makemore/master/names.txt"
+
+
+def get_data_file(filename: str, url: str):
+    # data/<filename>, downloaded the first time it is needed
+    from nlp_algorithms.util.path_util import get_data_path
+
+    path = get_data_path() / filename
+    if not path.exists():
+        print(f"{path} not found, downloading {url}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # a partial download would look like a finished file on the next run
+        tmp_path = path.with_name(path.name + ".part")
+        download_file(url=url, filepath=str(tmp_path))
+        tmp_path.rename(path)
+    return path
+
+
 def download_file(url: str, filepath: str):
     response = requests.get(url, stream=True, timeout=60)
     # an error page would be saved as the archive and fail later in tarfile

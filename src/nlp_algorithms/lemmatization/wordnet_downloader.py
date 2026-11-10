@@ -3,14 +3,16 @@ import urllib.request
 from tqdm import tqdm
 from pathlib import Path
 
+from nlp_algorithms.util.path_util import get_data_path
+
 
 class WordNetDownloader:
     URL = "https://wordnetcode.princeton.edu/wn3.1.dict.tar.gz"
 
-    def __init__(self, download_dir="./wordnet_data"):
-        self.download_dir = Path(download_dir)
+    def __init__(self, download_dir=None):
+        self.download_dir = Path(download_dir or get_data_path() / "wordnet")
         self.download_dir.mkdir(parents=True, exist_ok=True)
-        self.filepath = self.download_dir / "wordnet-3.0.tar.gz"
+        self.filepath = self.download_dir / "wn3.1.dict.tar.gz"
 
     def download(self, force=False):
         if self.filepath.exists() and not force:
@@ -70,6 +72,9 @@ class WordNetDownloader:
         return exceptions
 
     def install(self, force=False):
+        dict_dir = self.download_dir / "dict"
+        if not force and (dict_dir / "index.noun").exists():
+            return dict_dir
         try:
             self.download(force)
             dict_dir = self.extract()
@@ -85,8 +90,8 @@ class WordNetDownloader:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Download WordNet 3.0")
-    parser.add_argument("--dir", default="./wordnet_data", help="Download directory")
+    parser = argparse.ArgumentParser(description="Download WordNet 3.1")
+    parser.add_argument("--dir", default=None, help="Download directory, default data/wordnet")
     parser.add_argument("--force", action="store_true", help="Force re-download")
     args = parser.parse_args()
 
